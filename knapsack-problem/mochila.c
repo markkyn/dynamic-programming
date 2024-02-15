@@ -4,9 +4,16 @@
 
 typedef struct
 {
+    int id;
     int value;
     int weight;
-} Item;
+} Item_t;
+
+typedef struct
+{
+    Item_t *items;
+    int count;
+} Knapsack_t;
 
 typedef struct
 {
@@ -14,6 +21,12 @@ typedef struct
     int cols;
     int32_t *arr_ptr;
 } Matrix_t;
+
+void add_item(Knapsack_t *sack, Item_t item)
+{
+    sack->items[sack->count] = item;
+    sack->count++;
+}
 
 int get_value(Matrix_t *matrix, int i, int j)
 {
@@ -36,7 +49,7 @@ int max(int a, int b)
     return b;
 }
 
-void calc_value_mt(Matrix_t *matrix, Item *items)
+void calc_value_mt(Matrix_t *matrix, Item_t *items)
 {
     // setting the first row
     for (int w = 0; w < matrix->cols; w++)
@@ -71,6 +84,34 @@ void calc_value_mt(Matrix_t *matrix, Item *items)
     }
 }
 
+Knapsack_t select_items(Matrix_t *matrix, Item_t *items)
+{
+
+    Knapsack_t sack = {
+        .count = 0,
+        .items = (Item_t *)malloc(sizeof(Item_t) * matrix->rows)};
+
+    for (int i = matrix->rows - 1; i > 0;)
+    {
+        for (int j = matrix->cols - 1; j > 0;)
+        {
+            if (get_value(matrix, i, j) != get_value(matrix, i - 1, j))
+            {
+                printf("Item[%d]", i);
+
+                add_item(&sack, items[i]);
+                i = i - 1;
+                j = j - items[i].weight;
+            }
+            else
+            {
+                i = i - 1;
+            }
+        }
+    }
+    return sack;
+}
+
 int main(int argc, char *argv[])
 {
     if (argc < 3)
@@ -85,13 +126,16 @@ int main(int argc, char *argv[])
     fscanf(input_fp, "%d %d", &N, &C);
 
     // Items
-    Item *items = (Item *)malloc(sizeof(Item) * N);
+    Item_t *items = (Item_t *)malloc(sizeof(Item_t) * N);
 
-    // setting Item`s values up
+    // setting Item_t`s values up
     for (int i = 0; i < N; i++)
+    {
+        items->id = i;
         fscanf(input_fp, "%d", &items[i].value);
+    }
 
-    // setting Item`s weight up
+    // setting Item_t`s weight up
     for (int i = 0; i < N; i++)
         fscanf(input_fp, "%d", &items[i].weight);
 
@@ -112,5 +156,11 @@ int main(int argc, char *argv[])
             printf("%*d ", 3, x);
         }
         printf("\n");
+    }
+
+    Knapsack_t sack = select_items(&V_i_w, items);
+    for (int i = 0; i < sack.count; i++)
+    {
+       // printf("Item[%d] -> %dkg/R$ %d,00\n", sack.items->id, sack.items[i].weight, sack.items[i].value);
     }
 }
