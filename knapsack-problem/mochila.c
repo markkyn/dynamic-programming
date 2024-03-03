@@ -161,6 +161,6 @@ int main(int argc, char *argv[])
     Knapsack_t sack = select_items(&V_i_w, items);
     for (int i = 0; i < sack.count; i++)
     {
-       // printf("Item[%d] -> %dkg/R$ %d,00\n", sack.items->id, sack.items[i].weight, sack.items[i].value);
+       printf("Item[%d] -> %dkg/R$ %d,00\n", sack.items->id, sack.items[i].weight, sack.items[i].value);
     }
 }
