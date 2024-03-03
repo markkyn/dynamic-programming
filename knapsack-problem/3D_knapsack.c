@@ -9,7 +9,7 @@ typedef struct
     double value;
     int weight;
     int volume;
-    bool alocated;
+    bool allocated;
 } Item_t;
 
 typedef struct
@@ -21,6 +21,9 @@ typedef struct
 
 typedef struct
 {
+    int32_t volume;
+    double value;
+    int32_t weight;
     Item_t *items;
     int count;
 } Knapsack_t;
@@ -31,7 +34,6 @@ typedef struct
     int cols;
     int depth;
     double *arr_ptr;
-
 } Matrix_t;
 
 /*
@@ -46,17 +48,24 @@ typedef struct
     X--------Lowest Volume && Highest Weight
 */
 
+FILE *input_fp;
+FILE *output_fp;
+
 void add_item(Knapsack_t *sack, Item_t item)
 {
     sack->items[sack->count] = item;
     sack->count++;
+
+    sack->value  += item.value;
+    sack->weight += item.weight;
+    sack->volume += item.volume;
 }
 
 double get_value(Matrix_t *matrix, int x, int y, int z)
 {
     int c = matrix->cols; // Número de colunas
     int r = matrix->rows; // Número de linhas
-    
+
     return matrix->arr_ptr[z * (r * c) + x * c + y];
 }
 
@@ -66,7 +75,7 @@ void set_value(Matrix_t *matrix, int x, int y, int z, double value)
     int r = matrix->rows; // Número de linhas
     int d = matrix->depth;
 
-    //printf("[Set Value] (%d * (r * c) + %d * c + %d) = %d\n", z, x, y, z * (r * c) + x * c + y);
+    // printf("[Set Value] (%d * (r * c) + %d * c + %d) = %d\n", z, x, y, z * (r * c) + x * c + y);
     if (z <= d - 1 && x <= r - 1 && y <= c - 1)
         matrix->arr_ptr[z * (r * c) + x * c + y] = value;
 }
@@ -102,20 +111,27 @@ void calc_value_mt(Matrix_t *matrix, Item_t *items)
             }
 }
 
-void select_items(Matrix_t *matrix, Vehicle_t *vehicle, Item_t *items, int32_t items_count)
+Knapsack_t select_items(Matrix_t *matrix, Vehicle_t *vehicle, Item_t *items, int32_t items_count)
 {
-
     int v = vehicle->volume_cap;
     int i = items_count;
     int w = vehicle->weight_cap;
 
+    Knapsack_t knapsack = {
+        .value = 0,
+        .volume = 0,
+        .count = 0,
+        .weight = 0,
+        .items = (Item_t *)malloc(sizeof(Item_t) * 255) // Arbitrary size
+    };
+
     while (v > 0 && i > 0 && w > 0)
     {
-        if (get_value(matrix, i, w, v) != get_value(matrix, i - 1, w, v) && items[i-1].alocated == false)
+        if (get_value(matrix, i, w, v) != get_value(matrix, i - 1, w, v) && items[i - 1].allocated == false)
         {
-            printf("\t[Selection] Item [%d] (%13s) selected\n", i, items[i-1].id );
+            items[i - 1].allocated = true;
 
-            (items[i-1]).alocated = true;
+            add_item(&knapsack, items[i-1]);
 
             i -= 1;
             w -= items[i].weight;
@@ -126,6 +142,8 @@ void select_items(Matrix_t *matrix, Vehicle_t *vehicle, Item_t *items, int32_t i
             i -= 1;
         }
     }
+
+    return knapsack;
 }
 
 int main(int argc, char *argv[])
@@ -133,10 +151,12 @@ int main(int argc, char *argv[])
     if (argc < 3)
         perror("Quantidade de argumentos insuficientes!");
 
-    FILE *input_fp = fopen(argv[1], "r");
+    input_fp = fopen(argv[1], "r");
+    output_fp = fopen(argv[2], "w");
 
     if (input_fp == NULL)
         printf("Nao foi possivel abrir o arquivo!");
+
     int N, M;
 
     // Vehicles
@@ -164,9 +184,9 @@ int main(int argc, char *argv[])
     for (int i = 0; i < M; i++)
     {
         fscanf(input_fp, "%13s %le %d %d", items[i].id, &items[i].value, &items[i].weight, &items[i].volume);
-        items[i].alocated = false;
+        items[i].allocated = false;
 
-        //printf("%13s %f %d %d\n", items[i].id, items[i].value, items[i].weight, items[i].volume);
+        // printf("%13s %f %d %d\n", items[i].id, items[i].value, items[i].weight, items[i].volume);
     }
 
     Matrix_t matrix = {
@@ -181,11 +201,39 @@ int main(int argc, char *argv[])
 
     calc_value_mt(&matrix, items);
 
-    for(int vh = 0; vh < N; vh++){
-        printf("[Selection] Chosing items for Vehicle[%d]\n", vh);
-        select_items(&matrix, &vehicles[vh], items, M);
+    for (int vh = 0; vh < N; vh++)
+    {
+        Knapsack_t knapsack = select_items(&matrix, &vehicles[vh], items, M);
+
+        fprintf(output_fp, "[%s]R$%.2f,%dKG(%d%%),%dL(%d%%)\n",
+                vehicles[vh].plate,
+                knapsack.value,
+                knapsack.weight, ((vehicles[vh].weight_cap - knapsack.weight) / vehicles[vh].weight_cap) * 100,
+                knapsack.volume, ((vehicles[vh].volume_cap - knapsack.volume) / vehicles[vh].volume_cap) * 100);
+
+        for (int i = 0; i < knapsack.count; i++)
+            fprintf(output_fp, "%s\n", knapsack.items[i].id);
     }
 
+    // Pending Items
+    Knapsack_t pending_sack = {
+        .value  = 0.0,
+        .weight = 0,
+        .volume = 0,
+        .count  = 0,
+        .items  = (Item_t *) malloc(sizeof (Item_t) * M) // Arbitray atribution (max = none item allocated)
+    }; 
 
+    for (int i = 0; i < M; i++)
+        if(!items[i].allocated)
+            add_item(&pending_sack, items[i]);
+
+    fprintf(output_fp, "[PENDENTE]R$%.2f,%dKG,%dL\n", pending_sack.value, pending_sack.weight,pending_sack.volume);
+    
+    for (int i = 0; i < pending_sack.count; i++)
+        fprintf(output_fp, "%s\n", pending_sack.items[i].id);
+
+    fclose(input_fp);
+    fclose(output_fp);
 
 }
