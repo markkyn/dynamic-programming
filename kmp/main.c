@@ -3,24 +3,29 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <string.h>
+#include <stdbool.h>
 
-#define ARBITRARY_SIZE 40
+#define ARBITRARY_SIZE 255
 
-typedef char *Gene_t;
+typedef struct
+{
+    char *P;
+    int32_t *R;
+    int32_t R_len;
+
+} Gene_t;
+
 typedef struct
 {
     char *id;
     int32_t gene_count;
     Gene_t *genes;
-    int32_t *R;
-    int32_t R_count;
+    int32_t percetage;
 } Disease_t;
 
-int32_t R_len = 0;
-void inserir(int32_t *R, int32_t *R_count, int32_t value)
+void inserir(int32_t *R, int32_t *R_len, int32_t value)
 {
-    R[*R_count] = value; // its position
-    (*R_count)++;
+    R[(*R_len)++] = value; // its position
 }
 
 void calcular_tabela(int32_t *k, char *P)
@@ -63,7 +68,7 @@ void calcular_tabela(int32_t *k, char *P)
     */
 }
 
-void KMP(int32_t *k, int32_t *R, int32_t *R_count, char *T, Gene_t P)
+bool KMP(int32_t *k, int32_t *R, int32_t *R_len, char *T, char *P)
 {
     /* Args
         int32_t *k => Transactions
@@ -71,25 +76,28 @@ void KMP(int32_t *k, int32_t *R, int32_t *R_count, char *T, Gene_t P)
         char *T => Text String
         char *P => Pattern String;
     */
-
     int32_t n = strlen(T), m = strlen(P);
 
+    printf("%d\n", m);
     calcular_tabela(k, P);
 
     for (int32_t i = 0, j = -1; i < n; i++)
     {
-        while (j >= 0 && P[j + 1] != T[i])
+        while (j >= 0 && P[j + 1] != T[i]) // Back
             j = k[j];
 
-        if (P[j + 1] == T[i]) // Correspondência
+        if (P[j + 1] == T[i]) // Next State = Char Match!
             j++;
 
-        if (j == m - 1)
+        if (j == (m - 1))
         {
-            inserir(R, R_count, i - m + 1);
+            // inserir(R, R_len, i - m + 1);
             j = k[j];
+
+            return true; // Match!!
         }
     }
+    return false;
 }
 
 int main(int argc, char *argv[])
@@ -116,20 +124,21 @@ int main(int argc, char *argv[])
     printf("%s\n", dna);
 
     diseases = (Disease_t *)malloc(sizeof(Disease_t) * disease_count);
+    // for each disease
     for (int d = 0; d < disease_count; d++)
     {
         diseases[d].id = (char *)malloc(sizeof(char) * ARBITRARY_SIZE); // Arbitrary Size
         fscanf(input_fp, "%s %d", diseases[d].id, &diseases[d].gene_count);
 
-        diseases[d].R = (int32_t *)malloc(sizeof(int32_t) * ARBITRARY_SIZE);
-        diseases[d].R_count = 0;
-        diseases[d].genes = (char **)malloc(sizeof(char *) * diseases[d].gene_count);
+        diseases[d].genes = (Gene_t *)malloc(sizeof(Gene_t) * diseases[d].gene_count);
 
+        // for each gene in disease:
         for (int g = 0; g < diseases[d].gene_count; g++)
         {
-            diseases[d].genes[g] = (char *)malloc(sizeof(char) * ARBITRARY_SIZE); // Arbitrary Size
-            fscanf(input_fp, " %s", diseases[d].genes[g]);
-            printf("%s \n", diseases[d].genes[g]);
+            diseases[d].genes[g].R = (int32_t *)malloc(sizeof(int32_t) * ARBITRARY_SIZE);
+            diseases[d].genes[g].P = (char *)malloc(sizeof(char) * ARBITRARY_SIZE); // Arbitrary Size
+            fscanf(input_fp, " %s", diseases[d].genes[g].P);
+            printf("%s \n", diseases[d].genes[g].P);
         }
         printf("\n");
     }
@@ -138,16 +147,24 @@ int main(int argc, char *argv[])
     int32_t *k = (int32_t *)malloc(sizeof(int32_t) * ARBITRARY_SIZE);
 
     printf("str_len(dna) = %ld\n", strlen(dna));
+    //  for each disease:
     for (int d = 0; d < disease_count; d++)
     {
+        //  for each gene:
+        int32_t matches = 0;
         for (int g = 0; g < diseases[d].gene_count; g++)
         {
-            KMP(k, diseases[d].R, &diseases[d].R_count, dna, diseases[d].genes[g]);
+            if (KMP(k, diseases[d].genes[g].R, &diseases[d].genes[g].R_len, dna, diseases[d].genes[g].P))
+            { // In case there is a Match
+                matches++;
+            }
 
             printf("R = ");
-            for (int i = 1; i < diseases[d].R_count; i++)
-                printf("%*d ", 2, diseases[d].R[i]);
-            printf("\n\n");
+            for (int32_t r = 0; r < diseases[d].genes[g].R_len; r++)
+                printf("%d ", diseases[d].genes[g].R[r]);
+            printf("\n");
         }
+        diseases[d].percetage = ((double)matches / (double)diseases[d].gene_count) * 100;
+        printf("\t[Disease = %s] match = %d\n", diseases[d].id, diseases[d].percetage);
     }
 }
