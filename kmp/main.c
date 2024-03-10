@@ -4,6 +4,7 @@
 #include <sys/stat.h>
 #include <string.h>
 #include <stdbool.h>
+#include <math.h>
 
 #define ARBITRARY_SIZE 255
 
@@ -12,7 +13,8 @@ typedef struct
     char *P;
     int32_t *R;
     int32_t R_len;
-
+    int32_t matches;
+    int32_t percent;
 } Gene_t;
 
 typedef struct
@@ -20,13 +22,78 @@ typedef struct
     char *id;
     int32_t gene_count;
     Gene_t *genes;
-    int32_t percetage;
+    int32_t active_genes_count;
+    int32_t percent;
 } Disease_t;
 
 void inserir(int32_t *R, int32_t *R_len, int32_t value)
 {
     R[(*R_len)++] = value; // its position
 }
+
+void merge(Disease_t arr[], int l, int m, int r) {
+    int i, j, k;
+    int n1 = m - l + 1;
+    int n2 = r - m;
+
+    // Cria arrays temporários
+    Disease_t *L = (Disease_t *)malloc(n1 * sizeof(Disease_t));
+    Disease_t *R = (Disease_t *)malloc(n2 * sizeof(Disease_t));
+
+    // Copia os dados para os arrays temporários L[] e R[]
+    for (i = 0; i < n1; i++)
+        L[i] = arr[l + i];
+    for (j = 0; j < n2; j++)
+        R[j] = arr[m + 1 + j];
+
+    // Merge dos arrays temporários de volta em arr[l..r] em ordem decrescente
+    i = 0; // Índice inicial do primeiro subarray
+    j = 0; // Índice inicial do segundo subarray
+    k = l; // Índice inicial do subarray mergeado
+    while (i < n1 && j < n2) {
+        if (L[i].percent >= R[j].percent) {
+            arr[k] = L[i];
+            i++;
+        } else {
+            arr[k] = R[j];
+            j++;
+        }
+        k++;
+    }
+
+    // Copia os elementos restantes de L[], se houver
+    while (i < n1) {
+        arr[k] = L[i];
+        i++;
+        k++;
+    }
+
+    // Copia os elementos restantes de R[], se houver
+    while (j < n2) {
+        arr[k] = R[j];
+        j++;
+        k++;
+    }
+
+    // Libera a memória alocada para os arrays temporários
+    free(L);
+    free(R);
+}
+
+void mergeSort(Disease_t arr[], int l, int r) {
+    if (l < r) {
+        // Encontra o ponto médio para dividir o array
+        int m = l + (r - l) / 2;
+
+        // Ordena as primeiras e segundas metades
+        mergeSort(arr, l, m);
+        mergeSort(arr, m + 1, r);
+
+        // Merge as metades ordenadas
+        merge(arr, l, m, r);
+    }
+}
+
 
 void calcular_tabela(int32_t *k, char *P)
 {
@@ -36,13 +103,13 @@ void calcular_tabela(int32_t *k, char *P)
     */
     // Inicialização
 
-    printf("P = ");
+    ////printf("P = ");
     for (int32_t i = 0; i < strlen(P); i++)
     {
         k[i] = -1;
-        printf("%*c ", 2, P[i]);
+        ////printf("%*c ", 2, P[i]);
     }
-    printf("\n");
+    ////printf("\n");
 
     for (int32_t i = 1, j = -1; i < strlen(P); i++)
     {
@@ -55,20 +122,19 @@ void calcular_tabela(int32_t *k, char *P)
 
         k[i] = j;
     }
-
-    printf("k = ");
+    /*
+   //printf("k = ");
     for (int32_t i = 0; i < strlen(P); i++)
     {
-        printf("%*d ", 2, k[i]);
+       //printf("%*d ", 2, k[i]);
     }
-    printf("\n");
-    /*
+   //printf("\n");
         P  = G  T  C
         k  =   -1 -1
     */
 }
 
-bool KMP(int32_t *k, int32_t *R, int32_t *R_len, char *T, char *P)
+void KMP(int32_t *k, int32_t *R, int32_t *R_len, char *T, char *P, int32_t sub_len, Gene_t *gene)
 {
     /* Args
         int32_t *k => Transactions
@@ -77,27 +143,42 @@ bool KMP(int32_t *k, int32_t *R, int32_t *R_len, char *T, char *P)
         char *P => Pattern String;
     */
     int32_t n = strlen(T), m = strlen(P);
+    if (m == 0)
+        return;
 
-    printf("%d\n", m);
+   //printf("%d\n", m);
     calcular_tabela(k, P);
 
-    for (int32_t i = 0, j = -1; i < n; i++)
+    for (int32_t i = 0, j = -1, l = 0; i < n || j == m - 1; i++)
     {
-        while (j >= 0 && P[j + 1] != T[i]) // Back
-            j = k[j];
-
-        if (P[j + 1] == T[i]) // Next State = Char Match!
-            j++;
-
-        if (j == (m - 1))
+        // Break Match
+        while (j >= l && P[j + 1] != T[i])
         {
-            // inserir(R, R_len, i - m + 1);
+            // l += j;
             j = k[j];
 
-            return true; // Match!!
+            ////printf("[BreakAt] i = %d | j = %d\n", i, j);
+        }
+
+        // Next State = Char Match!
+        if (P[j + 1] == T[i])
+        {
+            j++;
+            ////printf("[CharMatch] i = %2d (%c) | j = %d (%c) next = %c\n", i, T[i], j, P[j], P[j + 1]);
+        }
+
+        // FullMatch!
+        if (j + 1 >= sub_len + l)
+        {
+            ////printf("[Match] i = %2d (%c) | j = %d (%c) next = %c\n", i, T[i], j, P[j], P[j + 1]);
+            if (j == m - 1 || P[0] != T[i + 1])
+            {
+                gene->matches += j + 1;
+                l = j + 1;
+            }
         }
     }
-    return false;
+    return;
 }
 
 int main(int argc, char *argv[])
@@ -106,6 +187,7 @@ int main(int argc, char *argv[])
         perror("Quantidade de argumentos insuficientes!");
 
     FILE *input_fp = fopen(argv[1], "r");
+    FILE *output_fp = fopen(argv[2], "w");
 
     struct stat sb;
     stat(argv[1], &sb);
@@ -121,7 +203,7 @@ int main(int argc, char *argv[])
     fscanf(input_fp, "%[^\n] ", dna);
     fscanf(input_fp, "%d \n", &disease_count);
 
-    printf("%s\n", dna);
+   //printf("%s\n", dna);
 
     diseases = (Disease_t *)malloc(sizeof(Disease_t) * disease_count);
     // for each disease
@@ -136,35 +218,41 @@ int main(int argc, char *argv[])
         for (int g = 0; g < diseases[d].gene_count; g++)
         {
             diseases[d].genes[g].R = (int32_t *)malloc(sizeof(int32_t) * ARBITRARY_SIZE);
-            diseases[d].genes[g].P = (char *)malloc(sizeof(char) * ARBITRARY_SIZE); // Arbitrary Size
+            //diseases[d].genes[g].P = (char *)malloc(sizeof(char) * ARBITRARY_SIZE); // Arbitrary Size
+            diseases[d].genes[g].P = malloc(sb.st_size);
             fscanf(input_fp, " %s", diseases[d].genes[g].P);
-            printf("%s \n", diseases[d].genes[g].P);
+           //printf("%s \n", diseases[d].genes[g].P);
         }
-        printf("\n");
+       //printf("\n");
     }
 
     /* KMP */
-    int32_t *k = (int32_t *)malloc(sizeof(int32_t) * ARBITRARY_SIZE);
+    int32_t *k = (int32_t *)malloc(sb.st_size);
 
-    printf("str_len(dna) = %ld\n", strlen(dna));
+   //printf("str_len(dna) = %ld\n", strlen(dna));
     //  for each disease:
     for (int d = 0; d < disease_count; d++)
     {
         //  for each gene:
-        int32_t matches = 0;
         for (int g = 0; g < diseases[d].gene_count; g++)
         {
-            if (KMP(k, diseases[d].genes[g].R, &diseases[d].genes[g].R_len, dna, diseases[d].genes[g].P))
-            { // In case there is a Match
-                matches++;
-            }
+            // calculate the matched chars
+            KMP(k, diseases[d].genes[g].R, &diseases[d].genes[g].R_len, dna, diseases[d].genes[g].P, sub_size, &diseases[d].genes[g]);
 
-            printf("R = ");
-            for (int32_t r = 0; r < diseases[d].genes[g].R_len; r++)
-                printf("%d ", diseases[d].genes[g].R[r]);
-            printf("\n");
+            // if the gene have 90% compability, its activated
+            if ((((double)diseases[d].genes[g].matches / (double)strlen(diseases[d].genes[g].P)) * 100) >= 90)
+                diseases[d].active_genes_count++;
+
+           //printf("[Disease = %s - Gene (%s)] match = %d\n", diseases[d].id, diseases[d].genes[g].P, diseases[d].genes[g].matches);
         }
-        diseases[d].percetage = ((double)matches / (double)diseases[d].gene_count) * 100;
-        printf("\t[Disease = %s] match = %d\n", diseases[d].id, diseases[d].percetage);
+
+        diseases[d].percent = round(((double)diseases[d].active_genes_count / (double)diseases[d].gene_count) * 100 );
+
+       //printf("Chance to envolve the disease[%s] = %d%%\n", diseases[d].id, diseases[d].percent);
     }
+
+    mergeSort(diseases, 0, disease_count - 1);
+
+    for (int32_t d = 0 ; d < disease_count; d++)
+        fprintf(output_fp, "%s->%d%%\n", diseases[d].id, diseases[d].percent);
 }
