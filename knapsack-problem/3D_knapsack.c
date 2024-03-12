@@ -52,6 +52,9 @@ FILE *input_fp;
 FILE *output_fp;
 Item_t *items = NULL;
 int N, M;
+double pending_value  = 0;
+int pending_weight = 0;
+int pending_volume = 0;
 
 void loadItems(FILE *input_fp, Item_t **head, int32_t M)
 {
@@ -67,10 +70,13 @@ void loadItems(FILE *input_fp, Item_t **head, int32_t M)
         fscanf(input_fp, "%s %lf %d %d", items[i].id, &items[i].value, &items[i].weight, &items[i].volume);
 
         items[i].allocated = false;
+        pending_value +=  items[i].value;
+        pending_weight += items[i].weight;
+        pending_volume += items[i].volume;
 
-        printf("%*d | %s | %*.2f | %*d | %*d |\n", 5, i, items[i].id, 7, items[i].value, 3, items[i].weight, 3, items[i].volume);
+       // printf("%*d | %s | %*.2f | %*d | %*d |\n", 5, i, items[i].id, 7, items[i].value, 3, items[i].weight, 3, items[i].volume);
     }
-    printf("----------------------------------------\n");
+    //printf("----------------------------------------\n");
 }
 
 void add_item(Knapsack_t *sack, Item_t *item, int index)
@@ -78,9 +84,14 @@ void add_item(Knapsack_t *sack, Item_t *item, int index)
     sack->items[sack->count] = *item;
     sack->count++;
 
-    sack->value += item->value;
+    sack->value  += item->value;
     sack->weight += item->weight;
     sack->volume += item->volume;
+
+    pending_value  -= item->value;
+    pending_weight -= item->weight;
+    pending_volume -= item->volume;
+
 
     (*item).allocated = true;
 }
@@ -134,7 +145,7 @@ double max(double a, double b)
     return (a > b) ? a : b;
 }
 
-void calc_value_mt(Matrix_t *matrix, Item_t *items)
+void calc_value_mt(Matrix_t *matrix, Item_t *items, int minimum_vol, int minimum_capw)
 {
     for (int v = 0; v < matrix->depth; v++)        // v = Z axis
         for (int i = 1; i < matrix->rows; i++)     // i = X axis
@@ -158,7 +169,7 @@ void calc_value_mt(Matrix_t *matrix, Item_t *items)
 Knapsack_t select_items(Matrix_t *matrix, Vehicle_t *vehicle, Item_t *items, int32_t items_count)
 {
     int v = vehicle->volume_cap;
-    int i = items_count;
+    int i = items_count - 1;
     int w = vehicle->weight_cap;
 
     Knapsack_t knapsack = {
@@ -227,15 +238,21 @@ int main(int argc, char *argv[])
     Vehicle_t *vehicles = (Vehicle_t *)malloc(sizeof(Vehicle_t) * N);
 
     int32_t maximum_vol = 0, maximum_capw = 0;
+    int32_t minimum_vol = INT32_MAX, minimum_capw = INT32_MAX;
 
     for (int i = 0; i < N; i++)
     {
         fscanf(input_fp, "%s %d %d", vehicles[i].plate, &vehicles[i].weight_cap, &vehicles[i].volume_cap);
         if (vehicles[i].volume_cap > maximum_vol)
             maximum_vol = vehicles[i].volume_cap;
+        if (vehicles[i].volume_cap < minimum_vol)
+            minimum_vol = vehicles[i].volume_cap;
 
         if (vehicles[i].weight_cap > maximum_capw)
             maximum_capw = vehicles[i].weight_cap;
+        if (vehicles[i].volume_cap < minimum_capw)
+            minimum_capw = vehicles[i].volume_cap;
+
     }
 
     // Items
@@ -255,9 +272,9 @@ int main(int argc, char *argv[])
             .arr_ptr = (double *)malloc(
                 (vehicles[vh].weight_cap + 1) * (vehicles[vh].volume_cap + 1) * (M + 1) * sizeof(double)),
         };
-        printf("[Matrix] rows = %d, cols = %d, depth = %d\n\n", matrix.rows, matrix.cols, matrix.depth);
+        //printf("[Matrix] rows = %d, cols = %d, depth = %d\n\n", matrix.rows, matrix.cols, matrix.depth);
 
-        calc_value_mt(&matrix, items);
+        calc_value_mt(&matrix, items, minimum_vol, minimum_capw);
         // print_matrix(&matrix);
 
         /* Items Selection */
@@ -267,35 +284,33 @@ int main(int argc, char *argv[])
             fprintf(output_fp, "[%s]R$%.2f,%dKG(%d%%),%dL(%d%%)\n",
                     vehicles[vh].plate,
                     knapsack.value,
-                    knapsack.weight, ((vehicles[vh].weight_cap - knapsack.weight) / vehicles[vh].weight_cap) * 100,
-                    knapsack.volume, ((vehicles[vh].volume_cap - knapsack.volume) / vehicles[vh].volume_cap) * 100);
+                    knapsack.weight, (int)((double)(knapsack.weight / vehicles[vh].weight_cap) * 100.0),
+                    knapsack.volume, (int)((double)(knapsack.volume / vehicles[vh].volume_cap) * 100.0));
 
             for (int i = knapsack.count - 1; i >= 0; i--)
                 fprintf(output_fp, "%s\n", knapsack.items[i].id);
         }
-    
-        for(int i = 0; i < matrix.rows; i++)
+
+        for (int i = 0; i < M; i++)
         {
-            if(items[i].allocated)
+            if (items[i].allocated)
             {
-                int j = M+1; // last element
-                while(items[j].allocated && j > i)
-                    j--;
-                
-                swapItems(&items[i], &items[j]);
+                for (int j = i; j < M - 1; j++)
+                {
+                    items[j] = items[j + 1];
+                }
                 M--;
+                i--;
             }
         }
     }
 
-    // Pending Items
-    Knapsack_t pending_sack = {
-        .value = 0.0,
-        .weight = 0,
-        .volume = 0,
-        .count = 0,
-        .items = (Item_t *)malloc(sizeof(Item_t) * M) // Arbitray atribution (max = none item allocated)
-    };
+    /* PENDING ITEMS */
+    {
+        fprintf(output_fp, "[PENDENTE]R$%.2f,%dKG,%dL:\n", pending_value, pending_weight, pending_volume);
+        for (int p = 1; p < M; p++)
+            fprintf(output_fp, "%s\n", items[p].id);
+    }
 
     fclose(input_fp);
     fclose(output_fp);
